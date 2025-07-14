@@ -1,46 +1,36 @@
 name: Flutter Android Build
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build:
-    name: Build APK
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.19.6'
 
-      - name: Backup lib and pubspec.yaml
-        run: |
+      # 備份自訂程式
+      - run: |
           mv lib lib_backup
           cp pubspec.yaml pubspec_backup.yaml
 
-      - name: Regenerate Flutter project structure
-        run: flutter create . --platforms android --overwrite
+      # 重新產生正式 Flutter 專案骨架
+      - run: flutter create . --platforms android --project-name ranked_ball_game --overwrite
 
-      - name: Restore lib and pubspec.yaml
-        run: |
+      # 還原自訂程式
+      - run: |
           rm -rf lib
           mv lib_backup lib
           mv pubspec_backup.yaml pubspec.yaml
 
-      - name: Get dependencies
-        run: flutter pub get
+      - run: flutter pub get
+      - run: flutter build apk --release
 
-      - name: Build APK (Release)
-        run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: app-release.apk
           path: build/app/outputs/flutter-apk/app-release.apk
