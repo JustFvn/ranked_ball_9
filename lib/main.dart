@@ -16,6 +16,16 @@ class RankedBallGame extends StatelessWidget {
   }
 }
 
+/// 段位資料模型
+class Rank {
+  const Rank(this.name, this.min, this.max, this.color);
+
+  final String name;
+  final int min;
+  final int max;
+  final Color color;
+}
+
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
   @override
@@ -26,73 +36,82 @@ class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin {
   late SharedPreferences prefs;
   int score = 0;
-  late AnimationController _ctrl; // 彈跳動畫控制器
 
-  final ranks = [
-    {'name': '木球', 'min': 0, 'max': 1000, 'color': Colors.brown},
-    {'name': '石球', 'min': 1000, 'max': 5000, 'color': Colors.grey},
-    {'name': '銅球', 'min': 5000, 'max': 10000, 'color': Colors.orange},
-    {'name': '鐵球', 'min': 10000, 'max': 20000, 'color': Colors.blueGrey},
-    {'name': '金球', 'min': 20000, 'max': 40000, 'color': Colors.amber},
-    {'name': '綠寶球', 'min': 40000, 'max': 70000, 'color': Colors.green},
-    {'name': '紫晶球', 'min': 70000, 'max': 100000, 'color': Colors.purple},
-    {'name': '鑽球', 'min': 100000, 'max': 1 << 31, 'color': Colors.cyan},
+  late AnimationController _animCtrl;
+
+  /// 段位定義（最後一段上限給很大值）
+  final List<Rank> ranks = const [
+    Rank('木球', 0, 1000, Colors.brown),
+    Rank('石球', 1000, 5000, Colors.grey),
+    Rank('銅球', 5000, 10000, Colors.orange),
+    Rank('鐵球', 10000, 20000, Colors.blueGrey),
+    Rank('金球', 20000, 40000, Colors.amber),
+    Rank('綠寶球', 40000, 70000, Colors.green),
+    Rank('紫晶球', 70000, 100000, Colors.purple),
+    Rank('鑽球', 100000, 1 << 31, Colors.cyan),
   ];
 
   @override
   void initState() {
     super.initState();
-    _initPrefs();
-    _ctrl = AnimationController(
+    _animCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 120),
       lowerBound: .9,
       upperBound: 1.1,
     )..value = 1;
+
+    _loadScore();
   }
 
-  Future<void> _initPrefs() async {
+  Future<void> _loadScore() async {
     prefs = await SharedPreferences.getInstance();
     setState(() => score = prefs.getInt('score') ?? 0);
   }
 
-  void _tap() {
+  void _tapBall() {
     setState(() {
       score += 1;
       prefs.setInt('score', score);
-      _ctrl.forward(from: .9);
+      _animCtrl.forward(from: .9);
     });
   }
 
-  Map<String, dynamic> get cur =>
-      ranks.lastWhere((r) => score >= r['min'] && score < r['max']);
-  Map<String, dynamic>? get next {
-    if (cur['name'] == '鑽球') return null;
-    return ranks[ranks.indexOf(cur) + 1];
+  Rank get currentRank =>
+      ranks.lastWhere((r) => score >= r.min && score < r.max);
+
+  Rank? get nextRank {
+    if (currentRank.name == '鑽球') return null;
+    final idx = ranks.indexOf(currentRank);
+    return ranks[idx + 1];
+  }
+
+  double get progress {
+    if (nextRank == null) return 1.0;
+    return (score - currentRank.min) /
+        (nextRank!.min - currentRank.min);
   }
 
   @override
-  Widget build(BuildContext ctx) {
-    final prog = next == null
-        ? 1.0
-        : (score - cur['min']) / (next!['min'] - cur['min']);
-
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
           children: [
             const SizedBox(height: 20),
-            Text('分數: $score', style: const TextStyle(fontSize: 26)),
-            const SizedBox(height: 10),
+            Text('分數: $score',
+                style:
+                    const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Stack(
                 children: [
                   LinearProgressIndicator(
-                    value: prog.clamp(0.0, 1.0),
+                    value: progress.clamp(0.0, 1.0),
                     minHeight: 26,
-                    color: cur['color'],
+                    color: currentRank.color,
                     backgroundColor: Colors.white12,
                   ),
                   Positioned(
@@ -101,22 +120,23 @@ class _GameScreenState extends State<GameScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(cur['name'], style: const TextStyle(fontSize: 13)),
-                        Text('${cur['min']}',
+                        Text(currentRank.name,
+                            style: const TextStyle(fontSize: 13)),
+                        Text('${currentRank.min}',
                             style: const TextStyle(fontSize: 10)),
                       ],
                     ),
                   ),
-                  if (next != null)
+                  if (nextRank != null)
                     Positioned(
                       right: 8,
                       top: 3,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(next!['name'],
+                          Text(nextRank!.name,
                               style: const TextStyle(fontSize: 13)),
-                          Text('${next!['min']}',
+                          Text('${nextRank!.min}',
                               style: const TextStyle(fontSize: 10)),
                         ],
                       ),
@@ -126,21 +146,21 @@ class _GameScreenState extends State<GameScreen>
             ),
             const Spacer(),
             GestureDetector(
-              onTap: _tap,
+              onTap: _tapBall,
               child: ScaleTransition(
-                scale: _ctrl,
+                scale: _animCtrl,
                 child: Container(
                   width: 320,
                   height: 320,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: cur['color'],
+                    color: currentRank.color,
                     border: Border.all(color: Colors.white, width: 4),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 36),
           ],
         ),
       ),
@@ -149,7 +169,7 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _animCtrl.dispose();
     super.dispose();
   }
 }
